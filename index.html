@@ -25,8 +25,8 @@
     <div class="header-toolbar d-flex flex-wrap align-items-center gap-2 mb-3 position-sticky top-0 bg-body pt-2 pb-2 position-relative" style="z-index:1020;">
       <h1 class="h2 mb-0">📖 Checklist da Bíblia</h1>
 
-      <!-- Nome do usuário (desktop) -->
-      <span id="userName" class="ms-auto me-2 fw-semibold d-none d-sm-inline"></span>
+      <!-- Nome do usuário (desktop apenas ≥ md) -->
+      <span id="userName" class="ms-auto me-2 fw-semibold d-none d-md-inline"></span>
 
       <!-- Botão de Configuração (mobile) -->
       <div class="dropdown position-absolute top-0 end-0 mt-2 d-block d-sm-none">
@@ -140,7 +140,7 @@
     const normTight = (s) => removeAccents(String(s).toLowerCase()).replace(/[^a-z0-9]/g, '');
 
     let globalOrder = 0;
-    let currentResponsiveMode = isMobile() ? 'mobile' : 'desktop'; // evita fechar ao “resize” do scroll no mobile
+    let currentResponsiveMode = isMobile() ? 'mobile' : 'desktop'; // evita fechar ao “resize” de rolagem no mobile
 
     // ===== Render =====
     for (const [testamento, livrosDoTestamento] of Object.entries(livros)) {
@@ -166,7 +166,7 @@
 
       const deck = document.createElement('div');
       deck.className = 'row g-3';
-      deck.id = `deck-${normTight(testamento)}`; // id para accordion por testamento
+      deck.id = `deck-${normTight(testamento)}`;
       section.appendChild(deck);
       list.appendChild(section);
 
@@ -234,12 +234,12 @@
           }
 
           if (now === 'mobile') {
-            collapse.classList.add('collapse');            // deixa Bootstrap controlar abrir/fechar
+            collapse.classList.add('collapse');
             btnToggle.setAttribute('data-bs-toggle', 'collapse');
             btnToggle.setAttribute('data-bs-target', `#${collapseId}`);
             headerRow.style.cursor = 'pointer';
           } else {
-            collapse.classList.remove('collapse');         // mostra sempre no desktop
+            collapse.classList.remove('collapse');
             collapse.classList.add('show');
             btnToggle.removeAttribute('data-bs-toggle');
             btnToggle.removeAttribute('data-bs-target');
@@ -247,9 +247,9 @@
           }
         }
 
-        // === Accordion: quando abre um, fecha outros do mesmo container (deck ou resultados)
+        // Accordion: ao abrir um, fecha os outros do mesmo container
         collapse.addEventListener('show.bs.collapse', () => {
-          const container = col.parentElement; // deck da seção ou results
+          const container = col.parentElement;
           container.querySelectorAll('.collapse.show').forEach(openEl => {
             if (openEl !== collapse) {
               const inst = bootstrap.Collapse.getOrCreateInstance(openEl, { toggle: false });
@@ -258,9 +258,8 @@
           });
         });
 
-        // ==== Clique no HEADER inteiro (mobile) para abrir/fechar
+        // Clique no HEADER inteiro (mobile) para abrir/fechar
         headerRow.addEventListener('click', (ev) => {
-          // Evita conflito quando clica no checkbox do livro
           if (ev.target && ev.target.tagName === 'INPUT') return;
           if (isMobile()) {
             const inst = bootstrap.Collapse.getOrCreateInstance(collapse, { toggle: false });
@@ -295,7 +294,9 @@
               if (precisa && confirm(`Você quer marcar automaticamente todos os capítulos anteriores até o ${i}?`)) {
                 for (let j = 1; j < i; j++) {
                   const prev = document.getElementById(`${livro}-${j}`);
-                  if (prev && !prev.checked) { prev.checked = true; localStorage.setItem(`${livro}-${j}`, true); checkedCount++; }
+                  if (prev && !prev.checked) {
+                    prev.checked = true; localStorage.setItem(`${livro}-${j}`, true); checkedCount++;
+                  }
                 }
               }
             }
@@ -311,7 +312,6 @@
           checkboxesPorTestamento[testamento].push(chk);
         }
 
-        // Estado inicial do livro
         chkLivro.checked = allChecked;
         updateBookCount(badge, checkedCount, total);
         chkLivro.addEventListener('change', () => {
@@ -333,9 +333,8 @@
         sections[testamento].appendChild(col);
         livroCards.push(col);
 
-        // Responsivo inicial
+        // Responsivo
         applyResponsiveCollapse(true);
-        // Atualiza apenas quando troca de modo (evita fechar ao rolar mobile)
         window.addEventListener('resize', () => applyResponsiveCollapse(false));
       }
     }
@@ -581,18 +580,35 @@
       });
     }
 
+    // >>> Ajuste: esconder "Entrar" de verdade quando logado e nome só desktop
     function updateAuthUI(user){
       const name = user?.displayName || '';
-      // desktop: mostra nome, esconde/mostra botões
+
+      // Desktop: nome (span é d-none d-md-inline, então só aparece ≥ md)
       const nameEl = document.getElementById('userName');
       if (nameEl) {
         nameEl.textContent = name ? `Olá, ${name}` : '';
         nameEl.classList.toggle('d-none', !name);
       }
-      document.getElementById('btnLogin')?.classList.toggle('d-none', !!user);
-      document.getElementById('btnLogout')?.classList.toggle('d-none', !user);
 
-      // mobile: header com nome + itens login/logout
+      // Desktop: botões Entrar/Sair (controla classes responsivas)
+      const btnLogin  = document.getElementById('btnLogin');
+      const btnLogout = document.getElementById('btnLogout');
+      if (btnLogin && btnLogout) {
+        if (user) {
+          btnLogin.classList.add('d-none','d-sm-none');
+          btnLogin.classList.remove('d-sm-inline-flex');
+          btnLogout.classList.remove('d-none','d-sm-none');
+          btnLogout.classList.add('d-sm-inline-flex');
+        } else {
+          btnLogin.classList.remove('d-none','d-sm-none');
+          btnLogin.classList.add('d-sm-inline-flex');
+          btnLogout.classList.add('d-none','d-sm-none');
+          btnLogout.classList.remove('d-sm-inline-flex');
+        }
+      }
+
+      // Mobile (menu ⚙️): nome + Entrar/Sair
       const mUserLine = document.getElementById('mUserLine');
       const mUserName = document.getElementById('mUserName');
       if (mUserLine && mUserName) {
