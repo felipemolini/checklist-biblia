@@ -24,11 +24,10 @@
 <body class="bg-body text-body">
   <div class="container py-3">
     <!-- Top bar -->
-    <!-- ADIÇÃO: position-relative para ancorar o botão ⚙️ no canto -->
     <div class="header-toolbar d-flex flex-wrap align-items-center gap-2 mb-3 position-sticky top-0 bg-body pt-2 pb-2 position-relative" style="z-index:1020;">
       <h1 class="h2 mb-0">📖 Checklist da Bíblia</h1>
 
-      <!-- Botão de Configuração no canto superior direito (sempre visível) -->
+      <!-- Botão de Configuração (mobile) -->
       <div class="dropdown position-absolute top-0 end-0 mt-2 d-block d-sm-none">
         <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Configurações">
           ⚙️
@@ -38,13 +37,15 @@
           <li><a class="dropdown-item" href="#" id="mImport">📥 Importar</a></li>
           <li><hr class="dropdown-divider"></li>
           <li><a class="dropdown-item" href="#" id="mTema">🌓 Alternar tema</a></li>
+          <li><a class="dropdown-item" href="#" id="mLogin">🔐 Entrar com Google</a></li>
+          <li><a class="dropdown-item d-none" href="#" id="mLogout">🚪 Sair</a></li>
         </ul>
       </div>
 
       <!-- Espaçador para que os controles abaixo quebrem linha naturalmente -->
       <div class="w-100 mt-3"></div>
 
-      <!-- Desktop buttons (mantidos) -->
+      <!-- Desktop buttons -->
       <div class="btn-group d-none d-sm-inline-flex" role="group">
         <button class="btn btn-primary" id="btnExport">📤 Exportar</button>
         <input type="file" id="fileImport" accept=".json" class="d-none" />
@@ -58,11 +59,13 @@
         <button class="btn btn-outline-secondary" id="btnClearSearch" title="Limpar">✖</button>
       </div>
 
-      <!-- Theme desktop -->
+      <!-- Theme + Auth (desktop) -->
       <button class="btn btn-outline-secondary d-none d-sm-inline-flex" id="btnTema" title="Tema">🌓</button>
+      <button class="btn btn-outline-secondary d-none d-sm-inline-flex" id="btnLogin" title="Entrar">🔐</button>
+      <button class="btn btn-outline-secondary d-none d-sm-inline-flex d-none" id="btnLogout" title="Sair">🚪</button>
     </div>
 
-    <!-- Filtros rápidos AT/NT (mobile friendly) -->
+    <!-- Filtros rápidos AT/NT -->
     <div class="d-flex flex-wrap gap-2 mb-2 align-items-center">
       <div class="btn-group" role="group" aria-label="Filtro Testamento">
         <button class="btn btn-outline-primary active" data-filter="todos">Todos</button>
@@ -80,10 +83,10 @@
       </div>
     </div>
 
-    <!-- Resultados de busca ficam aqui no topo -->
+    <!-- Resultados de busca -->
     <div id="search-results" class="row g-3 d-none"></div>
 
-    <!-- Lista padrão (seções por testamento) -->
+    <!-- Lista (seções por testamento) -->
     <div id="list" class="row g-3"></div>
   </div>
 
@@ -131,7 +134,7 @@
 
     const sections = {}; // testamento -> div.section
     const checkboxesPorTestamento = { "Antigo Testamento": [], "Novo Testamento": [] };
-    const todosCheckboxes = [];
+    const todosCheckboxes = window.todosCheckboxes = []; // <- exposto p/ módulo Firebase
     const livroCards = []; // cards para busca/filtro
     const barrasTestamento = {}; // testamento -> barra element
 
@@ -189,6 +192,7 @@
         const body = document.createElement('div');
         body.className = 'card-body';
 
+        // Header do livro
         const headerRow = document.createElement('div');
         headerRow.className = 'd-flex align-items-center justify-content-between flex-wrap gap-2';
 
@@ -215,6 +219,7 @@
         headerRow.appendChild(right);
         body.appendChild(headerRow);
 
+        // Corpo (capítulos)
         const collapse = document.createElement('div');
         collapse.id = collapseId;
         const capsDiv = document.createElement('div');
@@ -253,6 +258,7 @@
 
           chk.addEventListener('change', () => {
             if (chk.checked) {
+              // só pergunta no uso manual
               let precisa = false;
               for (let j = 1; j < i; j++) {
                 const prev = document.getElementById(`${livro}-${j}`);
@@ -279,6 +285,7 @@
           checkboxesPorTestamento[testamento].push(chk);
         }
 
+        // Estado inicial do livro
         chkLivro.checked = allChecked;
         updateBookCount(badge, checkedCount, total);
         chkLivro.addEventListener('change', () => {
@@ -300,6 +307,7 @@
         sections[testamento].appendChild(col);
         livroCards.push(col);
 
+        // aplicar comportamento responsivo inicial
         applyResponsiveCollapse();
         window.addEventListener('resize', applyResponsiveCollapse);
       }
@@ -309,6 +317,23 @@
       el.textContent = `${checked}/${total}`;
       el.className = `badge ${checked===total? 'text-bg-success':'text-bg-secondary'}`;
     }
+
+    // Recalcula badges/checkbox do livro após alterações em massa (ex.: sync da nuvem)
+    function recalcularTodosBadges(){
+      livroCards.forEach(col=>{
+        const total = parseInt(col.querySelector('.livro-card').getAttribute('data-total'),10);
+        const s = col.querySelector('.livro-card').getAttribute('data-livro-norm');
+        const badge = col.querySelector(`#count-${s}`);
+        const inputs = col.querySelectorAll('.capitulos input.form-check-input');
+        let checkedCount = 0;
+        inputs.forEach(cb => { localStorage.setItem(cb.id, cb.checked); if (cb.checked) checkedCount++; });
+        const headerRow = col.querySelector('.card-body .d-flex');
+        const chkLivro = headerRow.querySelector('input.form-check-input');
+        chkLivro.checked = (checkedCount === total);
+        updateBookCount(badge, checkedCount, total);
+      });
+    }
+    window.recalcularTodosBadges = recalcularTodosBadges;
 
     // ===== Progresso =====
     function atualizarProgresso() {
@@ -323,6 +348,7 @@
       const barraTotal = document.getElementById('barraTotal');
       barraTotal.style.width = pctTotal + '%'; barraTotal.textContent = pctTotal + '%';
     }
+    window.atualizarProgresso = atualizarProgresso; // expõe para o módulo Firebase
 
     // ===== Tema =====
     function aplicarTemaSalvo() {
@@ -359,7 +385,7 @@
       const raw = searchBar.value || '';
       const all = normTight(raw);
       const nums = raw.match(/\d{1,3}/g);
-      const cap = nums ? parseInt(nums[nums.length-1],10) : null;
+      const cap = nums ? parseInt(nums[nums.length-1],10) : null; // último número
       const textOnly = raw.replace(/\d+/g,' ').trim();
       const q = normTight(textOnly);
       const hasLetters = /[A-Za-zÁ-ú]/.test(raw);
@@ -369,6 +395,7 @@
 
       const matched = [];
       livroCards.forEach(col => {
+        // Restaura todos os capítulos
         col.querySelectorAll('.capitulos label').forEach(lbl => lbl.style.display = '');
 
         const name = col.querySelector('.livro-card').getAttribute('data-livro-norm');
@@ -415,6 +442,7 @@
 
         document.querySelectorAll('.testamento-section > :is(div.progress, div.d-flex)').forEach(el=> el.classList.add('d-none'));
       } else {
+        // Restaurar cards às seções originais
         Object.values(sections).forEach(deck=>deck.querySelectorAll('.col-12').forEach(c=>c.remove()));
         const byTest = {"Antigo Testamento":[],"Novo Testamento":[]};
         livroCards.forEach(col=>{ byTest[col.dataset.testamento].push(col); });
@@ -449,7 +477,7 @@
       document.getElementById('btnExport')?.addEventListener('click', exportarProgresso);
       document.getElementById('btnImport')?.addEventListener('click', ()=>fileImport.click());
       document.getElementById('btnTema')?.addEventListener('click', alternarTema);
-      // dropdown (agora está no topo, visível em todas as larguras)
+      // dropdown (mobile)
       mExport?.addEventListener('click', (e)=>{e.preventDefault(); exportarProgresso();});
       mImport?.addEventListener('click', (e)=>{e.preventDefault(); fileImport.click();});
       mTema?.addEventListener('click', (e)=>{e.preventDefault(); alternarTema();});
@@ -469,6 +497,108 @@
     aplicarTemaSalvo();
     atualizarProgresso();
   </script>
+
+  <!-- Firebase (módulo) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc, onSnapshot, serverTimestamp, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+
+    // --- Sua config Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyAI4b0jY2qqXsqHWGxDk9tb6jz2O1KNUM0",
+      authDomain: "checklist-biblia.firebaseapp.com",
+      projectId: "checklist-biblia",
+      storageBucket: "checklist-biblia.firebasestorage.app",
+      messagingSenderId: "202180475350",
+      appId: "1:202180475350:web:edc94b2d58f98bb9f30c77"
+    };
+
+    // --- Init
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    enableIndexedDbPersistence(db).catch(()=>{}); // offline ok
+    const provider = new GoogleAuthProvider();
+
+    // Debounce p/ salvar
+    let saveTimer = null;
+    let unsub = null;
+    let applyingRemote = false;
+
+    function serializeLocal() {
+      return (window.todosCheckboxes || []).filter(cb => cb.checked).map(cb => cb.id);
+    }
+
+    async function applyRemote(ids) {
+      applyingRemote = true;
+      const set = new Set(ids || []);
+      (window.todosCheckboxes || []).forEach(cb => {
+        cb.checked = set.has(cb.id);
+        localStorage.setItem(cb.id, cb.checked);
+      });
+      window.recalcularTodosBadges?.();
+      window.atualizarProgresso?.();
+      applyingRemote = false;
+    }
+
+    function queueSave() {
+      if (!auth.currentUser || applyingRemote) return;
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(async () => {
+        const ref = doc(db, "users", auth.currentUser.uid, "checklists", "biblia");
+        await setDoc(ref, { checkedIds: serializeLocal(), updatedAt: serverTimestamp() }, { merge: true });
+      }, 350);
+    }
+
+    async function startSync(uid) {
+      const ref = doc(db, "users", uid, "checklists", "biblia");
+
+      // Conciliação inicial (união)
+      const snap = await getDoc(ref);
+      const local = new Set(serializeLocal());
+      const remote = new Set((snap.exists() && snap.data().checkedIds) || []);
+      const union = Array.from(new Set([...local, ...remote]));
+      await setDoc(ref, { checkedIds: union, updatedAt: serverTimestamp() }, { merge: true });
+      await applyRemote(union);
+
+      // Listener em tempo real
+      unsub?.();
+      unsub = onSnapshot(ref, s => {
+        const data = s.data();
+        if (!data || !data.checkedIds) return;
+        const incoming = JSON.stringify(data.checkedIds);
+        const current  = JSON.stringify(serializeLocal());
+        if (incoming !== current) applyRemote(data.checkedIds);
+      });
+    }
+
+    function updateAuthUI(user){
+      document.getElementById('btnLogin')?.classList.toggle('d-none', !!user);
+      document.getElementById('btnLogout')?.classList.toggle('d-none', !user);
+      document.getElementById('mLogin')?.classList.toggle('d-none', !!user);
+      document.getElementById('mLogout')?.classList.toggle('d-none', !user);
+    }
+
+    // Botões
+    document.getElementById('btnLogin')?.addEventListener('click', ()=> signInWithPopup(auth, provider));
+    document.getElementById('btnLogout')?.addEventListener('click', ()=> signOut(auth));
+    document.getElementById('mLogin')?.addEventListener('click', (e)=>{ e.preventDefault(); signInWithPopup(auth, provider); });
+    document.getElementById('mLogout')?.addEventListener('click', (e)=>{ e.preventDefault(); signOut(auth); });
+
+    // Observa auth
+    onAuthStateChanged(auth, user => {
+      updateAuthUI(user);
+      unsub?.(); // encerra listener antigo
+      if (user) startSync(user.uid);
+    });
+
+    // Qualquer mudança em checkbox agenda salvamento na nuvem
+    document.addEventListener('change', (e) => {
+      if (e.target && e.target.matches('input.form-check-input')) queueSave();
+    });
+  </script>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
