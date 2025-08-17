@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Checklist de Leitura da Bíblia</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .capitulos { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: .5rem; }
+    .capitulos label { font-size: .9rem; }
+    .progress-container { background-color: var(--bs-secondary-bg); border-radius: .25rem; overflow: hidden; height: 1.5rem; margin-bottom: 1rem; }
+    .progress-bar { height: 100%; }
+    .highlight { outline: 2px solid var(--bs-warning); border-radius: .5rem; }
+    /* Aumenta área de toque no mobile */
+    @media (max-width: 576px) {
+      .chapter-pill.btn { padding: .6rem .5rem; min-height: 42px; justify-content: center; }
+      .chapter-pill input { scale: 1.2; }
+      .header-toolbar { gap: .5rem !important; }
+    }
+    /* FAB (scroll topo) */
+    #btnTop { width: 52px; height: 52px; bottom: 84px; right: 16px; display: none; }
+  </style>
+</head>
+<body class="bg-body text-body">
+  <div class="container py-3">
+    <!-- Top bar -->
+    <!-- ADIÇÃO: position-relative para ancorar o botão ⚙️ no canto -->
+    <div class="header-toolbar d-flex flex-wrap align-items-center gap-2 mb-3 position-sticky top-0 bg-body pt-2 pb-2 position-relative" style="z-index:1020;">
+      <h1 class="h2 mb-0">📖 Checklist da Bíblia</h1>
+
+      <!-- Botão de Configuração no canto superior direito (sempre visível) -->
+      <div class="dropdown position-absolute top-0 end-0 mt-2 d-block d-sm-none">
+        <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Configurações">
+          ⚙️
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><a class="dropdown-item" href="#" id="mExport">📤 Exportar</a></li>
+          <li><a class="dropdown-item" href="#" id="mImport">📥 Importar</a></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item" href="#" id="mTema">🌓 Alternar tema</a></li>
+        </ul>
+      </div>
+
+      <!-- Espaçador para que os controles abaixo quebrem linha naturalmente -->
+      <div class="w-100 mt-3"></div>
+
+      <!-- Desktop buttons (mantidos) -->
+      <div class="btn-group d-none d-sm-inline-flex" role="group">
+        <button class="btn btn-primary" id="btnExport">📤 Exportar</button>
+        <input type="file" id="fileImport" accept=".json" class="d-none" />
+        <button class="btn btn-secondary" id="btnImport">📥 Importar</button>
+      </div>
+
+      <!-- Search -->
+      <div class="input-group" style="max-width: 520px;">
+        <span class="input-group-text">🔎</span>
+        <input id="searchBar" type="text" class="form-control" placeholder="Livro e/ou capítulo (ex: joao 3, 28)">
+        <button class="btn btn-outline-secondary" id="btnClearSearch" title="Limpar">✖</button>
+      </div>
+
+      <!-- Theme desktop -->
+      <button class="btn btn-outline-secondary d-none d-sm-inline-flex" id="btnTema" title="Tema">🌓</button>
+    </div>
+
+    <!-- Filtros rápidos AT/NT (mobile friendly) -->
+    <div class="d-flex flex-wrap gap-2 mb-2 align-items-center">
+      <div class="btn-group" role="group" aria-label="Filtro Testamento">
+        <button class="btn btn-outline-primary active" data-filter="todos">Todos</button>
+        <button class="btn btn-outline-primary" data-filter="Antigo Testamento">AT</button>
+        <button class="btn btn-outline-primary" data-filter="Novo Testamento">NT</button>
+      </div>
+      <small class="text-body-secondary ms-1">Dica: toque no título do livro para abrir/fechar capítulos (somente no celular).</small>
+    </div>
+
+    <!-- Progresso total -->
+    <div class="mb-3">
+      <label class="form-label fw-semibold">📊 Progresso Total da Bíblia</label>
+      <div class="progress" style="height:24px;">
+        <div class="progress-bar bg-success" id="barraTotal" style="width:0%">0%</div>
+      </div>
+    </div>
+
+    <!-- Resultados de busca ficam aqui no topo -->
+    <div id="search-results" class="row g-3 d-none"></div>
+
+    <!-- Lista padrão (seções por testamento) -->
+    <div id="list" class="row g-3"></div>
+  </div>
+
+  <!-- Floating Action Button: voltar ao topo -->
+  <button id="btnTop" class="btn btn-primary rounded-circle position-fixed d-flex align-items-center justify-content-center">↑</button>
+
+  <script>
+    // ===== Dados =====
+    const livros = {
+      "Antigo Testamento": {
+        "Gênesis": 50, "Êxodo": 40, "Levítico": 27, "Números": 36, "Deuteronômio": 34,
+        "Josué": 24, "Juízes": 21, "Rute": 4, "1 Samuel": 31, "2 Samuel": 24,
+        "1 Reis": 22, "2 Reis": 25, "1 Crônicas": 29, "2 Crônicas": 36, "Esdras": 10,
+        "Neemias": 13, "Ester": 10, "Jó": 42, "Salmos": 150, "Provérbios": 31,
+        "Eclesiastes": 12, "Cânticos": 8, "Isaías": 66, "Jeremias": 52, "Lamentações": 5,
+        "Ezequiel": 48, "Daniel": 12, "Oséias": 14, "Joel": 3, "Amós": 9,
+        "Obadias": 1, "Jonas": 4, "Miquéias": 7, "Naum": 3, "Habacuque": 3,
+        "Sofonias": 3, "Ageu": 2, "Zacarias": 14, "Malaquias": 4
+      },
+      "Novo Testamento": {
+        "Mateus": 28, "Marcos": 16, "Lucas": 24, "João": 21, "Atos": 28,
+        "Romanos": 16, "1 Coríntios": 16, "2 Coríntios": 13, "Gálatas": 6, "Efésios": 6,
+        "Filipenses": 4, "Colossenses": 4, "1 Tessalonicenses": 5, "2 Tessalonicenses": 3,
+        "1 Timóteo": 6, "2 Timóteo": 4, "Tito": 3, "Filemom": 1, "Hebreus": 13,
+        "Tiago": 5, "1 Pedro": 5, "2 Pedro": 3, "1 João": 5, "2 João": 1,
+        "3 João": 1, "Judas": 1, "Apocalipse": 22
+      }
+    };
+
+    // ===== Estado/UI =====
+    const list = document.getElementById('list');
+    const results = document.getElementById('search-results');
+    const btnTema = document.getElementById('btnTema');
+    const mTema = document.getElementById('mTema');
+    const btnExport = document.getElementById('btnExport');
+    const mExport = document.getElementById('mExport');
+    const btnImport = document.getElementById('btnImport');
+    const mImport = document.getElementById('mImport');
+    const fileImport = document.getElementById('fileImport');
+    const searchBar = document.getElementById('searchBar');
+    const btnClearSearch = document.getElementById('btnClearSearch');
+    const btnTop = document.getElementById('btnTop');
+
+    const isMobile = () => window.matchMedia('(max-width: 576px)').matches;
+
+    const sections = {}; // testamento -> div.section
+    const checkboxesPorTestamento = { "Antigo Testamento": [], "Novo Testamento": [] };
+    const todosCheckboxes = [];
+    const livroCards = []; // cards para busca/filtro
+    const barrasTestamento = {}; // testamento -> barra element
+
+    const removeAccents = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const normTight = (s) => removeAccents(String(s).toLowerCase()).replace(/[^a-z0-9]/g, ''); // sem espaços/pontuação
+
+    let globalOrder = 0; // ordem original dos cards para restauração
+
+    // ===== Render =====
+    for (const [testamento, livrosDoTestamento] of Object.entries(livros)) {
+      const section = document.createElement('div');
+      section.className = 'col-12 testamento-section';
+      section.dataset.testamento = testamento;
+
+      const header = document.createElement('div');
+      header.className = 'd-flex align-items-center justify-content-between';
+      header.innerHTML = `<h2 class="h6 mb-1">${testamento}</h2>`;
+      const progressWrap = document.createElement('div');
+      progressWrap.className = 'progress my-2';
+      progressWrap.style.height = '20px';
+      const bar = document.createElement('div');
+      bar.className = 'progress-bar bg-info';
+      bar.id = `barra-${testamento.replace(/\s/g,'')}`;
+      bar.style.width = '0%';
+      bar.textContent = '0%';
+      progressWrap.appendChild(bar);
+
+      section.appendChild(header);
+      section.appendChild(progressWrap);
+
+      const deck = document.createElement('div'); // container dos cards do testamento
+      deck.className = 'row g-3';
+      section.appendChild(deck);
+      list.appendChild(section);
+
+      sections[testamento] = deck;
+      barrasTestamento[testamento] = bar;
+
+      // Livros
+      for (const [livro, total] of Object.entries(livrosDoTestamento)) {
+        const col = document.createElement('div');
+        col.className = 'col-12';
+        col.dataset.originalIndex = (++globalOrder).toString();
+        col.dataset.testamento = testamento;
+
+        const s = normTight(livro);
+        const collapseId = `collapse-${s}`;
+
+        const card = document.createElement('div');
+        card.className = 'card shadow-sm livro-card';
+        card.setAttribute('data-livro', livro);
+        card.setAttribute('data-livro-norm', s);
+        card.setAttribute('data-total', total);
+
+        const body = document.createElement('div');
+        body.className = 'card-body';
+
+        const headerRow = document.createElement('div');
+        headerRow.className = 'd-flex align-items-center justify-content-between flex-wrap gap-2';
+
+        const left = document.createElement('div');
+        left.className = 'd-flex align-items-center gap-2';
+        const chkLivro = document.createElement('input');
+        chkLivro.type = 'checkbox';
+        chkLivro.className = 'form-check-input';
+        const btnToggle = document.createElement('button');
+        btnToggle.className = 'btn btn-link p-0 text-decoration-none';
+        btnToggle.textContent = livro;
+        left.appendChild(chkLivro);
+        left.appendChild(btnToggle);
+
+        const right = document.createElement('div');
+        right.className = 'd-flex align-items-center gap-2';
+        const badge = document.createElement('span');
+        badge.className = 'badge text-bg-secondary';
+        badge.id = `count-${s}`;
+        badge.textContent = `0/${total}`;
+        right.appendChild(badge);
+
+        headerRow.appendChild(left);
+        headerRow.appendChild(right);
+        body.appendChild(headerRow);
+
+        const collapse = document.createElement('div');
+        collapse.id = collapseId;
+        const capsDiv = document.createElement('div');
+        capsDiv.className = 'capitulos mt-2';
+
+        function applyResponsiveCollapse() {
+          if (isMobile()) {
+            collapse.className = 'collapse';
+            btnToggle.setAttribute('data-bs-toggle', 'collapse');
+            btnToggle.setAttribute('data-bs-target', `#${collapseId}`);
+            collapse.classList.remove('show');
+          } else {
+            collapse.className = '';
+            btnToggle.removeAttribute('data-bs-toggle');
+            btnToggle.removeAttribute('data-bs-target');
+            collapse.classList.add('show');
+          }
+        }
+
+        let allChecked = true; let checkedCount = 0;
+        for (let i = 1; i <= total; i++) {
+          const id = `${livro}-${i}`;
+          const chk = document.createElement('input');
+          chk.type = 'checkbox';
+          chk.id = id;
+          chk.className = 'form-check-input';
+          chk.checked = localStorage.getItem(id) === 'true';
+          if (!chk.checked) { allChecked = false; } else { checkedCount++; }
+
+          const lbl = document.createElement('label');
+          lbl.className = 'btn btn-sm btn-outline-secondary chapter-pill';
+          lbl.htmlFor = id;
+          lbl.appendChild(chk);
+          lbl.append(` ${i}`);
+          capsDiv.appendChild(lbl);
+
+          chk.addEventListener('change', () => {
+            if (chk.checked) {
+              let precisa = false;
+              for (let j = 1; j < i; j++) {
+                const prev = document.getElementById(`${livro}-${j}`);
+                if (prev && !prev.checked) { precisa = true; break; }
+              }
+              if (precisa && confirm(`Você quer marcar automaticamente todos os capítulos anteriores até o ${i}?`)) {
+                for (let j = 1; j < i; j++) {
+                  const prev = document.getElementById(`${livro}-${j}`);
+                  if (prev && !prev.checked) {
+                    prev.checked = true; localStorage.setItem(`${livro}-${j}`, true); checkedCount++;
+                  }
+                }
+              }
+            }
+            if (chk.checked) checkedCount++; else checkedCount--;
+            localStorage.setItem(id, chk.checked);
+            const anyUnchecked = Array.from(capsDiv.querySelectorAll('input.form-check-input')).some(c => !c.checked);
+            chkLivro.checked = !anyUnchecked;
+            updateBookCount(badge, checkedCount, total);
+            atualizarProgresso();
+          });
+
+          todosCheckboxes.push(chk);
+          checkboxesPorTestamento[testamento].push(chk);
+        }
+
+        chkLivro.checked = allChecked;
+        updateBookCount(badge, checkedCount, total);
+        chkLivro.addEventListener('change', () => {
+          const inputs = capsDiv.querySelectorAll('input.form-check-input');
+          inputs.forEach((cb) => {
+            if (cb.checked !== chkLivro.checked) {
+              cb.checked = chkLivro.checked; localStorage.setItem(cb.id, cb.checked);
+            }
+          });
+          checkedCount = chkLivro.checked ? total : 0;
+          updateBookCount(badge, checkedCount, total);
+          atualizarProgresso();
+        });
+
+        collapse.appendChild(capsDiv);
+        body.appendChild(collapse);
+        card.appendChild(body);
+        col.appendChild(card);
+        sections[testamento].appendChild(col);
+        livroCards.push(col);
+
+        applyResponsiveCollapse();
+        window.addEventListener('resize', applyResponsiveCollapse);
+      }
+    }
+
+    function updateBookCount(el, checked, total) {
+      el.textContent = `${checked}/${total}`;
+      el.className = `badge ${checked===total? 'text-bg-success':'text-bg-secondary'}`;
+    }
+
+    // ===== Progresso =====
+    function atualizarProgresso() {
+      for (const t of Object.keys(checkboxesPorTestamento)) {
+        const arr = checkboxesPorTestamento[t];
+        const pct = Math.round(arr.filter(x => x.checked).length / arr.length * 100);
+        const bar = barrasTestamento[t];
+        bar.style.width = pct + '%';
+        bar.textContent = pct + '%';
+      }
+      const pctTotal = Math.round(todosCheckboxes.filter(x => x.checked).length / todosCheckboxes.length * 100);
+      const barraTotal = document.getElementById('barraTotal');
+      barraTotal.style.width = pctTotal + '%'; barraTotal.textContent = pctTotal + '%';
+    }
+
+    // ===== Tema =====
+    function aplicarTemaSalvo() {
+      const tema = localStorage.getItem('tema-biblia-bootstrap') || 'light';
+      document.documentElement.setAttribute('data-bs-theme', tema);
+    }
+    function alternarTema() {
+      const cur = document.documentElement.getAttribute('data-bs-theme');
+      const next = cur === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-bs-theme', next);
+      localStorage.setItem('tema-biblia-bootstrap', next);
+    }
+
+    // ===== Exportar / Importar =====
+    function exportarProgresso() {
+      const op = prompt('Como deseja salvar?\n1 - Baixar JSON\n2 - Apenas salvar no navegador\nOutro - Cancelar');
+      if (op === '1') {
+        const dados = {}; for (let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); dados[k]=localStorage.getItem(k); }
+        const blob = new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download='progresso-biblia.json'; a.click();
+      } else if (op==='2') { alert('Progresso mantido no navegador (localStorage).'); }
+    }
+    function importarProgresso(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => { const dados = JSON.parse(e.target.result); for (const [k,v] of Object.entries(dados)) localStorage.setItem(k,v); location.reload(); };
+      reader.readAsText(file);
+    }
+
+    // ===== Busca (livro e capítulo) =====
+    function limparHighlights(){ document.querySelectorAll('.highlight').forEach(el=>el.classList.remove('highlight')); }
+
+    function filtrarLivros() {
+      limparHighlights();
+      const raw = searchBar.value || '';
+      const all = normTight(raw);
+      const nums = raw.match(/\d{1,3}/g);
+      const cap = nums ? parseInt(nums[nums.length-1],10) : null;
+      const textOnly = raw.replace(/\d+/g,' ').trim();
+      const q = normTight(textOnly);
+      const hasLetters = /[A-Za-zÁ-ú]/.test(raw);
+      const filtrando = all.length>0;
+
+      results.classList.toggle('d-none', !filtrando);
+
+      const matched = [];
+      livroCards.forEach(col => {
+        col.querySelectorAll('.capitulos label').forEach(lbl => lbl.style.display = '');
+
+        const name = col.querySelector('.livro-card').getAttribute('data-livro-norm');
+        const total = parseInt(col.querySelector('.livro-card').getAttribute('data-total'),10);
+        const livroOk = hasLetters ? (!q || name.includes(q) || name.includes(all)) : true;
+        const capOk = (!cap || cap<=total);
+        const score = (q && name.startsWith(q) ? 2 : 0) + (q && name.includes(q) ? 1 : 0);
+
+        if (!filtrando) {
+          col.classList.remove('d-none');
+        } else if (livroOk && capOk) {
+          matched.push({col, score});
+        } else {
+          col.classList.add('d-none');
+        }
+      });
+
+      if (filtrando) {
+        matched.sort((a,b)=> b.score - a.score);
+        results.innerHTML = '';
+        matched.forEach(({col}) => {
+          col.classList.remove('d-none');
+          results.appendChild(col);
+
+          const bodyCollapse = col.querySelector('.capitulos').parentElement;
+          if (bodyCollapse && bodyCollapse.classList.contains('collapse')) bodyCollapse.classList.add('show');
+
+          if (hasLetters && cap) {
+            const labels = col.querySelectorAll('.capitulos label');
+            labels.forEach(lbl => {
+              const num = parseInt(lbl.textContent.trim(), 10);
+              lbl.style.display = (num === cap) ? '' : 'none';
+            });
+            const target = col.querySelector(`label[for$='-${cap}']`);
+            if (target) {
+              target.classList.add('highlight');
+              target.scrollIntoView({behavior:'smooth', block:'center'});
+            }
+          } else if (cap && !hasLetters) {
+            const target = col.querySelector(`label[for$='-${cap}']`);
+            if (target) target.classList.add('highlight');
+          }
+        });
+
+        document.querySelectorAll('.testamento-section > :is(div.progress, div.d-flex)').forEach(el=> el.classList.add('d-none'));
+      } else {
+        Object.values(sections).forEach(deck=>deck.querySelectorAll('.col-12').forEach(c=>c.remove()));
+        const byTest = {"Antigo Testamento":[],"Novo Testamento":[]};
+        livroCards.forEach(col=>{ byTest[col.dataset.testamento].push(col); });
+        for (const t of Object.keys(byTest)) {
+          byTest[t].sort((a,b)=> parseInt(a.dataset.originalIndex)-parseInt(b.dataset.originalIndex));
+          byTest[t].forEach(col=> {
+            col.querySelectorAll('.capitulos label').forEach(lbl => lbl.style.display = '');
+            sections[t].appendChild(col);
+          });
+        }
+        document.querySelectorAll('.testamento-section > :is(div.progress, div.d-flex)').forEach(el=> el.classList.remove('d-none'));
+      }
+    }
+
+    function limparBusca(){ searchBar.value=''; filtrarLivros(); searchBar.focus(); }
+
+    // Filtro por testamento
+    document.querySelectorAll('[data-filter]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        document.querySelectorAll('[data-filter]').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        const filtro = btn.getAttribute('data-filter');
+        Object.values(sections).forEach(deck=>{
+          deck.parentElement.classList.toggle('d-none', filtro!=='todos' && deck.parentElement.dataset.testamento!==filtro);
+        });
+      });
+    });
+
+    // ===== Listeners =====
+    function hookExportImportTheme(){
+      // desktop
+      document.getElementById('btnExport')?.addEventListener('click', exportarProgresso);
+      document.getElementById('btnImport')?.addEventListener('click', ()=>fileImport.click());
+      document.getElementById('btnTema')?.addEventListener('click', alternarTema);
+      // dropdown (agora está no topo, visível em todas as larguras)
+      mExport?.addEventListener('click', (e)=>{e.preventDefault(); exportarProgresso();});
+      mImport?.addEventListener('click', (e)=>{e.preventDefault(); fileImport.click();});
+      mTema?.addEventListener('click', (e)=>{e.preventDefault(); alternarTema();});
+    }
+
+    hookExportImportTheme();
+
+    fileImport.addEventListener('change', (e)=>{ if(e.target.files[0]) importarProgresso(e.target.files[0]); });
+    searchBar.addEventListener('input', filtrarLivros);
+    btnClearSearch.addEventListener('click', limparBusca);
+
+    // FAB topo
+    window.addEventListener('scroll', ()=>{ btnTop.style.display = window.scrollY>200 ? 'inline-flex' : 'none'; });
+    btnTop.addEventListener('click', ()=> window.scrollTo({top:0, behavior:'smooth'}));
+
+    // Boot
+    aplicarTemaSalvo();
+    atualizarProgresso();
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
