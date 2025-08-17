@@ -18,9 +18,9 @@
     }
     #btnTop { width: 52px; height: 52px; bottom: 84px; right: 16px; display: none; }
 
-    /* ——— Forçar “desktop only” ——— */
+    /* Forçar que estes itens existam só no desktop grande (≥992px) */
     @media (max-width: 991.98px){
-      #userName, #btnLogin, #btnLogout { display: none !important; }
+      #userName, #btnLogin, #btnLogout, #btnTema { display: none !important; }
     }
   </style>
 </head>
@@ -65,7 +65,7 @@
         <button class="btn btn-outline-secondary" id="btnClearSearch" title="Limpar">✖</button>
       </div>
 
-      <!-- Tema + Auth (desktop only >= lg) -->
+      <!-- Tema + Auth (desktop >= lg) -->
       <button class="btn btn-outline-secondary d-none d-lg-inline-flex" id="btnTema" title="Tema">🌓</button>
       <button class="btn btn-outline-secondary d-none d-lg-inline-flex" id="btnLogin" title="Entrar">🔐</button>
       <button class="btn btn-outline-secondary d-none d-lg-inline-flex d-none" id="btnLogout" title="Sair">🚪</button>
@@ -145,7 +145,7 @@
     const normTight = (s) => removeAccents(String(s).toLowerCase()).replace(/[^a-z0-9]/g, '');
 
     let globalOrder = 0;
-    let currentResponsiveMode = isMobile() ? 'mobile' : 'desktop'; // evita fechar ao “resize” no mobile
+    let currentResponsiveMode = isMobile() ? 'mobile' : 'desktop'; // evita fechar ao “resize” de rolagem no mobile
 
     // ===== Render =====
     for (const [testamento, livrosDoTestamento] of Object.entries(livros)) {
@@ -252,7 +252,7 @@
           }
         }
 
-        // Accordion: abrir um fecha os outros do mesmo container
+        // Accordion: ao abrir um, fecha os outros do mesmo container
         collapse.addEventListener('show.bs.collapse', () => {
           const container = col.parentElement;
           container.querySelectorAll('.collapse.show').forEach(openEl => {
@@ -299,7 +299,9 @@
               if (precisa && confirm(`Você quer marcar automaticamente todos os capítulos anteriores até o ${i}?`)) {
                 for (let j = 1; j < i; j++) {
                   const prev = document.getElementById(`${livro}-${j}`);
-                  if (prev && !prev.checked) { prev.checked = true; localStorage.setItem(`${livro}-${j}`, true); checkedCount++; }
+                  if (prev && !prev.checked) {
+                    prev.checked = true; localStorage.setItem(`${livro}-${j}`, true); checkedCount++;
+                  }
                 }
               }
             }
@@ -315,7 +317,6 @@
           checkboxesPorTestamento[testamento].push(chk);
         }
 
-        // Estado inicial
         chkLivro.checked = allChecked;
         updateBookCount(badge, checkedCount, total);
         chkLivro.addEventListener('change', () => {
@@ -337,6 +338,7 @@
         sections[testamento].appendChild(col);
         livroCards.push(col);
 
+        // Responsivo
         applyResponsiveCollapse(true);
         window.addEventListener('resize', () => applyResponsiveCollapse(false));
       }
@@ -470,15 +472,14 @@
       } else {
         Object.values(sections).forEach(deck=>deck.querySelectorAll('.col-12').forEach(c=>c.remove()));
         const byTest = {"Antigo Testamento":[],"Novo Testamento":[]};
-        livroCards.forEach(col=>{ by Test[col.dataset.testamento]?.push(col); });
-        const at = byTest["Antigo Testamento"] || []; const nt = byTest["Novo Testamento"] || [];
-        [at, nt].forEach((arr, idx)=>{
-          arr.sort((a,b)=> parseInt(a.dataset.originalIndex)-parseInt(b.dataset.originalIndex));
-          arr.forEach(col=> {
+        livroCards.forEach(col=>{ byTest[col.dataset.testamento].push(col); });
+        for (const t of Object.keys(byTest)) {
+          byTest[t].sort((a,b)=> parseInt(a.dataset.originalIndex)-parseInt(b.dataset.originalIndex));
+          byTest[t].forEach(col=> {
             col.querySelectorAll('.capitulos label').forEach(lbl => lbl.style.display = '');
-            sections[idx===0?"Antigo Testamento":"Novo Testamento"].appendChild(col);
+            sections[t].appendChild(col);
           });
-        });
+        }
         document.querySelectorAll('.testamento-section > :is(div.progress, div.d-flex)').forEach(el=> el.classList.remove('d-none'));
       }
     }
@@ -523,6 +524,7 @@
     import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
     import { getFirestore, doc, setDoc, getDoc, onSnapshot, serverTimestamp, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
+    // Sua config Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyAI4b0jY2qqXsqHWGxDk9tb6jz2O1KNUM0",
       authDomain: "checklist-biblia.firebaseapp.com",
@@ -537,6 +539,7 @@
     const db = getFirestore(app);
     enableIndexedDbPersistence(db).catch(()=>{});
 
+    // Provider com seletor de contas
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: "select_account" });
 
@@ -582,7 +585,7 @@
       });
     }
 
-    // UI de autenticação (usar .hidden para não brigar com breakpoints)
+    // Esconder/mostrar UI de auth
     function updateAuthUI(user){
       const name = user?.displayName || '';
 
@@ -593,28 +596,26 @@
         nameEl.classList.toggle('d-none', !name);
       }
 
-      // Desktop: Entrar/Sair
+      // Desktop: Entrar/Sair (usar .hidden pra não brigar com breakpoints)
       const btnLogin  = document.getElementById('btnLogin');
       const btnLogout = document.getElementById('btnLogout');
       if (btnLogin)  btnLogin.hidden  = !!user;
       if (btnLogout) btnLogout.hidden = !user;
 
-      // Mobile (menu ⚙️)
+      // Mobile (menu ⚙️): nome + Entrar/Sair
       const mUserLine = document.getElementById('mUserLine');
       const mUserName = document.getElementById('mUserName');
       if (mUserLine && mUserName) {
         if (user) {
           mUserName.textContent = name || '(sem nome)';
-          mUserLine.hidden = false;
+          mUserLine.classList.remove('d-none');
         } else {
           mUserName.textContent = '';
-          mUserLine.hidden = true;
+          mUserLine.classList.add('d-none');
         }
       }
-      const mLogin  = document.getElementById('mLogin');
-      const mLogout = document.getElementById('mLogout');
-      if (mLogin)  mLogin.hidden  = !!user;
-      if (mLogout) mLogout.hidden = !user;
+      document.getElementById('mLogin')?.classList.toggle('d-none', !!user);
+      document.getElementById('mLogout')?.classList.toggle('d-none', !user);
     }
 
     async function doLogin(){
