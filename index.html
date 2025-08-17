@@ -25,12 +25,16 @@
     <div class="header-toolbar d-flex flex-wrap align-items-center gap-2 mb-3 position-sticky top-0 bg-body pt-2 pb-2 position-relative" style="z-index:1020;">
       <h1 class="h2 mb-0">📖 Checklist da Bíblia</h1>
 
+      <!-- Nome do usuário (desktop) -->
+      <span id="userName" class="ms-auto me-2 fw-semibold d-none d-sm-inline"></span>
+
       <!-- Botão de Configuração (mobile) -->
       <div class="dropdown position-absolute top-0 end-0 mt-2 d-block d-sm-none">
         <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Configurações">
           ⚙️
         </button>
         <ul class="dropdown-menu dropdown-menu-end">
+          <li><h6 class="dropdown-header d-none" id="mUserLine">Olá, <span id="mUserName"></span></h6></li>
           <li><a class="dropdown-item" href="#" id="mExport">📤 Exportar</a></li>
           <li><a class="dropdown-item" href="#" id="mImport">📥 Importar</a></li>
           <li><hr class="dropdown-divider"></li>
@@ -69,7 +73,7 @@
         <button class="btn btn-outline-primary" data-filter="Antigo Testamento">AT</button>
         <button class="btn btn-outline-primary" data-filter="Novo Testamento">NT</button>
       </div>
-      <small class="text-body-secondary ms-1">Dica: toque no título do livro para abrir/fechar capítulos (somente no celular).</small>
+      <small class="text-body-secondary ms-1">Dica: toque no cabeçalho do livro para abrir/fechar capítulos (no celular).</small>
     </div>
 
     <!-- Progresso total -->
@@ -136,6 +140,7 @@
     const normTight = (s) => removeAccents(String(s).toLowerCase()).replace(/[^a-z0-9]/g, '');
 
     let globalOrder = 0;
+    let currentResponsiveMode = isMobile() ? 'mobile' : 'desktop'; // evita fechar ao “resize” do scroll no mobile
 
     // ===== Render =====
     for (const [testamento, livrosDoTestamento] of Object.entries(livros)) {
@@ -161,6 +166,7 @@
 
       const deck = document.createElement('div');
       deck.className = 'row g-3';
+      deck.id = `deck-${normTight(testamento)}`; // id para accordion por testamento
       section.appendChild(deck);
       list.appendChild(section);
 
@@ -185,8 +191,10 @@
         const body = document.createElement('div');
         body.className = 'card-body';
 
+        // Header do livro (toda área clicável no mobile)
         const headerRow = document.createElement('div');
         headerRow.className = 'd-flex align-items-center justify-content-between flex-wrap gap-2';
+        headerRow.style.userSelect = 'none';
 
         const left = document.createElement('div');
         left.className = 'd-flex align-items-center gap-2';
@@ -211,24 +219,54 @@
         headerRow.appendChild(right);
         body.appendChild(headerRow);
 
+        // Corpo (capítulos)
         const collapse = document.createElement('div');
         collapse.id = collapseId;
         const capsDiv = document.createElement('div');
         capsDiv.className = 'capitulos mt-2';
 
-        function applyResponsiveCollapse() {
-          if (isMobile()) {
-            collapse.className = 'collapse';
+        function applyResponsiveCollapse(force=false) {
+          const now = isMobile() ? 'mobile' : 'desktop';
+          if (!force && now === currentResponsiveMode) {
+            // não mexe nas classes/show: evita fechar ao “resize” em rolagem mobile
+          } else {
+            currentResponsiveMode = now;
+          }
+
+          if (now === 'mobile') {
+            collapse.classList.add('collapse');            // deixa Bootstrap controlar abrir/fechar
             btnToggle.setAttribute('data-bs-toggle', 'collapse');
             btnToggle.setAttribute('data-bs-target', `#${collapseId}`);
-            collapse.classList.remove('show');
+            headerRow.style.cursor = 'pointer';
           } else {
-            collapse.className = '';
+            collapse.classList.remove('collapse');         // mostra sempre no desktop
+            collapse.classList.add('show');
             btnToggle.removeAttribute('data-bs-toggle');
             btnToggle.removeAttribute('data-bs-target');
-            collapse.classList.add('show');
+            headerRow.style.cursor = 'default';
           }
         }
+
+        // === Accordion: quando abre um, fecha outros do mesmo container (deck ou resultados)
+        collapse.addEventListener('show.bs.collapse', () => {
+          const container = col.parentElement; // deck da seção ou results
+          container.querySelectorAll('.collapse.show').forEach(openEl => {
+            if (openEl !== collapse) {
+              const inst = bootstrap.Collapse.getOrCreateInstance(openEl, { toggle: false });
+              inst.hide();
+            }
+          });
+        });
+
+        // ==== Clique no HEADER inteiro (mobile) para abrir/fechar
+        headerRow.addEventListener('click', (ev) => {
+          // Evita conflito quando clica no checkbox do livro
+          if (ev.target && ev.target.tagName === 'INPUT') return;
+          if (isMobile()) {
+            const inst = bootstrap.Collapse.getOrCreateInstance(collapse, { toggle: false });
+            if (collapse.classList.contains('show')) inst.hide(); else inst.show();
+          }
+        });
 
         let allChecked = true; let checkedCount = 0;
         for (let i = 1; i <= total; i++) {
@@ -257,9 +295,7 @@
               if (precisa && confirm(`Você quer marcar automaticamente todos os capítulos anteriores até o ${i}?`)) {
                 for (let j = 1; j < i; j++) {
                   const prev = document.getElementById(`${livro}-${j}`);
-                  if (prev && !prev.checked) {
-                    prev.checked = true; localStorage.setItem(`${livro}-${j}`, true); checkedCount++;
-                  }
+                  if (prev && !prev.checked) { prev.checked = true; localStorage.setItem(`${livro}-${j}`, true); checkedCount++; }
                 }
               }
             }
@@ -275,6 +311,7 @@
           checkboxesPorTestamento[testamento].push(chk);
         }
 
+        // Estado inicial do livro
         chkLivro.checked = allChecked;
         updateBookCount(badge, checkedCount, total);
         chkLivro.addEventListener('change', () => {
@@ -296,8 +333,10 @@
         sections[testamento].appendChild(col);
         livroCards.push(col);
 
-        applyResponsiveCollapse();
-        window.addEventListener('resize', applyResponsiveCollapse);
+        // Responsivo inicial
+        applyResponsiveCollapse(true);
+        // Atualiza apenas quando troca de modo (evita fechar ao rolar mobile)
+        window.addEventListener('resize', () => applyResponsiveCollapse(false));
       }
     }
 
@@ -541,9 +580,30 @@
         if (incoming !== current) applyRemote(data.checkedIds);
       });
     }
+
     function updateAuthUI(user){
+      const name = user?.displayName || '';
+      // desktop: mostra nome, esconde/mostra botões
+      const nameEl = document.getElementById('userName');
+      if (nameEl) {
+        nameEl.textContent = name ? `Olá, ${name}` : '';
+        nameEl.classList.toggle('d-none', !name);
+      }
       document.getElementById('btnLogin')?.classList.toggle('d-none', !!user);
       document.getElementById('btnLogout')?.classList.toggle('d-none', !user);
+
+      // mobile: header com nome + itens login/logout
+      const mUserLine = document.getElementById('mUserLine');
+      const mUserName = document.getElementById('mUserName');
+      if (mUserLine && mUserName) {
+        if (user) {
+          mUserName.textContent = name || '(sem nome)';
+          mUserLine.classList.remove('d-none');
+        } else {
+          mUserName.textContent = '';
+          mUserLine.classList.add('d-none');
+        }
+      }
       document.getElementById('mLogin')?.classList.toggle('d-none', !!user);
       document.getElementById('mLogout')?.classList.toggle('d-none', !user);
     }
